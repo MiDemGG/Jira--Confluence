@@ -1,8 +1,19 @@
+# Путь к файлу сертификата
+path_to_cert = './venv/cert/jira-gal-lan-chain.pem'
+
 from jira import JIRA
+from atlassian import Confluence
 
 def linked_issues_func(url_jira_server, log_passw, task_key):
+    
+    # Для виртуального окружения сертификат
+    options = {
+        'server': url_jira_server,
+        'verify': path_to_cert
+    }
+
     # Авторизация
-    jira = JIRA(server=url_jira_server, 
+    jira = JIRA(options=options,
                 basic_auth=log_passw)
 
     # Ключ задачи
