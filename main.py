@@ -1,4 +1,6 @@
 from jira import JIRA
+from atlassian import Confluence
+import markdown
 
 def linked_issues_func(url_jira_server, log_passw, task_key, path_to_cert):
     
@@ -34,16 +36,11 @@ def create_table_md(url_jira_server,
                     filename,
                     path_to_cert):
     """
-    Создает корректный Markdown-файл со ссылками на задачи,
-    правильно обрабатывая переносы строк и спецсимволы.
+    Создает Markdown-файл, заменяя переносы строк на пробелы
+    и экранируя спецсимволы.
     """
     try:
-        # Для виртуального окружения сертификат
-        options = {
-            'server': url_jira_server,
-            'verify': path_to_cert
-        }
-
+        options = {'server': url_jira_server, 'verify': path_to_cert}
         jira = JIRA(options=options, basic_auth=log_passw)
 
         table_header = "| Задача | Что изменено | Как изменено |\n"
@@ -56,26 +53,88 @@ def create_table_md(url_jira_server,
             what_value = getattr(issue.fields, field_what, None)
             how_value = getattr(issue.fields, field_how, None)
 
-            # Готовим текст для ячеек
-            what_str = str(what_value).replace('\r', '').replace('\n', '<br>').replace('|', '\|') if what_value else "-"
-            how_str = str(how_value).replace('\r', '').replace('\n', '<br>').replace('|', '\|') if how_value else "-"
+            if what_value:
+                # 1. Заменяем оба вида переносов на пробел
+                # 2. Экранируем '|' для избежания конфликтов с компилятором markdown
+                what_str = str(what_value).replace('\r\n', ' ').replace('\n', ' ').replace('|', '\\|')
+            else:
+                what_str = "-"
+
+            if how_value:
+                how_str = str(how_value).replace('\r\n', ' ').replace('\n', ' ').replace('|', '\\|')
+            else:
+                how_str = "-"
             
-            # --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
-            # Формируем Markdown-ссылку на задачу
             issue_link = f"[{issue_key}]({url_jira_server}/browse/{issue_key})"
-            # ---------------------
                 
             markdown_content += f"| {issue_link} | {what_str} | {how_str} |\n"
 
         with open(filename, 'w', encoding='utf-8') as f:
             f.write(markdown_content)
-        print(f"Отчет успешно создан и сохранен в файл: '{filename}'")
+        print(f"Корректный Markdown-файл успешно создан: '{filename}'")
 
     except Exception as e:
-        print(f"Произошла ошибка: {e}")
+        print(f"Произошла ошибка при создании Markdown-файла: {e}")
+
+def create_confluence_page(confluence_url,
+                           login,
+                           api_token,
+                           space_key,
+                           page_title,
+                           markdown_file_path,
+                           path_to_cert,
+                           parent_page_id=None):
+    """
+    Читает Markdown, конвертирует его в HTML и загружает в Confluence.
+    """
+    try:
+        confluence = Confluence(
+            url=confluence_url,
+            username=login,
+            password=api_token,
+            cloud=False,
+            verify_ssl=path_to_cert
+        )
+
+        with open(markdown_file_path, 'r', encoding='utf-8') as f:
+            markdown_content = f.read()
+
+        # Конвертируем в html
+        body_content = markdown.markdown(markdown_content, extensions=['tables'])
+        
+        # Проверяем и создаем/обновляем страницу
+        if confluence.page_exists(space=space_key, title=page_title):
+            page_id = confluence.get_page_id(space=space_key, title=page_title)
+            status = confluence.update_page(
+                page_id=page_id,
+                title=page_title,
+                body=body_content,
+                parent_id=parent_page_id,
+                representation='storage'
+            )
+            if status and 'id' in status:
+                print(f"Страница '{page_title}' успешно обновлена. ID: {status['id']}")
+            else:
+                print(f"Страница '{page_title}' была обновлена, но API не вернул подтверждение.")
+        else:
+            status = confluence.create_page(
+                space=space_key,
+                title=page_title,
+                body=body_content,
+                parent_id=parent_page_id,
+                representation='storage'
+            )
+            if status and 'id' in status:
+                print(f"Страница '{page_title}' успешно создана. ID: {status['id']}")
+            else:
+                print(f"Не удалось создать страницу '{page_title}'.")
+
+    except Exception as e:
+        print(f"Произошла ошибка при работе с Confluence: {e}")
+
 
 # Данные для подключения
-# Путь к файлу сертификата if use virtual envirement
+# Путь к файлу сертификата if use virtual envirament
 path_to_cert = './venv/cert/jira-gal-lan-chain.pem'
 # Jira server
 url = 'https://jira.galaktika.local'
@@ -90,10 +149,12 @@ url_confluence = "https://jira.galaktika.local/wiki"
 space_key = "test" # ключ пространства
 page_title = "Заголовок"
 
-
+'''
 linked_issues = linked_issues_func(url, (log, passw), task_num, path_to_cert)
 
 print(linked_issues)
 
 create_table_md(url, (log, passw), linked_issues, field_WHAT, field_HOW,
                 table_md_path, path_to_cert)
+'''
+create_confluence_page(url_confluence, log, passw, space_key, page_title, table_md_path, path_to_cert)
