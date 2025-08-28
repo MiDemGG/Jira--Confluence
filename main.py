@@ -1,10 +1,6 @@
-# Путь к файлу сертификата
-path_to_cert = './venv/cert/jira-gal-lan-chain.pem'
-
 from jira import JIRA
-from atlassian import Confluence
 
-def linked_issues_func(url_jira_server, log_passw, task_key):
+def linked_issues_func(url_jira_server, log_passw, task_key, path_to_cert):
     
     # Для виртуального окружения сертификат
     options = {
@@ -35,13 +31,20 @@ def create_table_md(url_jira_server,
                     issues_list,
                     field_what,
                     field_how,
-                    filename):
+                    filename,
+                    path_to_cert):
     """
     Создает корректный Markdown-файл со ссылками на задачи,
     правильно обрабатывая переносы строк и спецсимволы.
     """
     try:
-        jira = JIRA(server=url_jira_server, basic_auth=log_passw)
+        # Для виртуального окружения сертификат
+        options = {
+            'server': url_jira_server,
+            'verify': path_to_cert
+        }
+
+        jira = JIRA(options=options, basic_auth=log_passw)
 
         table_header = "| Задача | Что изменено | Как изменено |\n"
         table_divider = "|:---|:---|:---|\n"
@@ -71,16 +74,26 @@ def create_table_md(url_jira_server,
     except Exception as e:
         print(f"Произошла ошибка: {e}")
 
+# Данные для подключения
+# Путь к файлу сертификата if use virtual envirement
+path_to_cert = './venv/cert/jira-gal-lan-chain.pem'
+# Jira server
+url = 'https://jira.galaktika.local'
+log = 'dementev@gal.lan'
+passw = 'MiDem31052004!'
+task_num = 'ERP-12800'
+field_WHAT = 'customfield_10310'
+field_HOW = 'customfield_10311'
+table_md_path = './tmp/table.md'
+# Confluence server
+url_confluence = "https://jira.galaktika.local/wiki"
+space_key = "test" # ключ пространства
+page_title = "Заголовок"
 
-linked_issues = linked_issues_func('https://jira.galaktika.local',
-                                ('dementev@gal.lan', 'MiDem31052004!'),
-                                'ERP-12800')
+
+linked_issues = linked_issues_func(url, (log, passw), task_num, path_to_cert)
 
 print(linked_issues)
 
-create_table_md('https://jira.galaktika.local',
-                ('dementev@gal.lan', 'MiDem31052004!'),
-                linked_issues,
-                'customfield_10310',
-                'customfield_10311',
-                './tmp/table.md')
+create_table_md(url, (log, passw), linked_issues, field_WHAT, field_HOW,
+                table_md_path, path_to_cert)
