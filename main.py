@@ -76,31 +76,56 @@ def create_table_md(url_jira_server,
     except Exception as e:
         print(f"Произошла ошибка при создании Markdown-файла: {e}")
 
-def create_confluence_page(confluence_url,
-                           login,
-                           api_token,
-                           space_key,
-                           page_title,
-                           markdown_file_path,
-                           path_to_cert,
-                           parent_page_id=None):
+def create_confluence_space_and_page(confluence_url,
+                                     login,
+                                     passw,
+                                     space_key,
+                                     space_name,
+                                     page_title,
+                                     markdown_file_path,
+                                     path_to_cert="",
+                                     parent_page_id=None): # Параметр оставлен для совместимости, но не используется в create_space
     """
-    Читает Markdown, конвертирует его в HTML и загружает в Confluence.
+    Проверяет наличие пространства, при необходимости создает его,
+    затем читает Markdown, конвертирует его в HTML и загружает 
+    в виде страницы в Confluence.
     """
     try:
         confluence = Confluence(
             url=confluence_url,
             username=login,
-            password=api_token,
+            password=passw,
             cloud=False,
-            verify_ssl=path_to_cert
+            verify_ssl=path_to_cert if path_to_cert else True
         )
+
+        # Проверяем, существует ли пространство
+        try:
+            confluence.get_space(space_key)
+            print(f"Пространство '{space_key}' уже существует.")
+        except Exception:
+            # get_space() вызывает исключение
+            print(f"Пространство '{space_key}' не найдено. Создаем новое...")
+            try:
+                # Убран неподдерживаемый параметр 'description'
+                confluence.create_space(
+                    space_key=space_key,
+                    space_name=space_name
+                )
+                print(f"Пространство '{space_name}' ({space_key}) успешно создано.")
+            except Exception as e:
+                print(f"Не удалось создать пространство '{space_key}': {e}")
+                return
+
+        if not markdown_file_path:
+            print("Путь к Markdown файлу не указан. Создание/обновление страницы пропущено.")
+            return
 
         with open(markdown_file_path, 'r', encoding='utf-8') as f:
             markdown_content = f.read()
 
-        # Конвертируем в html
-        body_content = markdown.markdown(markdown_content, extensions=['tables'])
+        # Конвертируем Markdown в HTML
+        body_content = markdown.markdown(markdown_content, extensions=['tables', 'fenced_code'])
         
         # Проверяем и создаем/обновляем страницу
         if confluence.page_exists(space=space_key, title=page_title):
@@ -130,8 +155,7 @@ def create_confluence_page(confluence_url,
                 print(f"Не удалось создать страницу '{page_title}'.")
 
     except Exception as e:
-        print(f"Произошла ошибка при работе с Confluence: {e}")
-
+        print(f"Произошла общая ошибка при работе с Confluence: {e}")
 
 # Данные для подключения
 # Путь к файлу сертификата if use virtual envirament
@@ -147,14 +171,17 @@ table_md_path = './tmp/table.md'
 # Confluence server
 url_confluence = "https://jira.galaktika.local/wiki"
 space_key = "test" # ключ пространства
+space_name = "test"
 page_title = "Заголовок"
 
-'''
+
 linked_issues = linked_issues_func(url, (log, passw), task_num, path_to_cert)
 
 print(linked_issues)
 
 create_table_md(url, (log, passw), linked_issues, field_WHAT, field_HOW,
                 table_md_path, path_to_cert)
-'''
-create_confluence_page(url_confluence, log, passw, space_key, page_title, table_md_path, path_to_cert)
+
+create_confluence_space_and_page(url_confluence, log, passw,
+                                 space_key, space_name,
+                                 page_title, table_md_path, path_to_cert)
