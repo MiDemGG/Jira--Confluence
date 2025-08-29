@@ -107,7 +107,6 @@ def create_confluence_space_and_page(confluence_url,
             # get_space() вызывает исключение
             print(f"Пространство '{space_key}' не найдено. Создаем новое...")
             try:
-                # Убран неподдерживаемый параметр 'description'
                 confluence.create_space(
                     space_key=space_key,
                     space_name=space_name
