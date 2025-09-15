@@ -36,38 +36,40 @@ def create_table_md(url_jira_server,
                     filename,
                     path_to_cert):
     """
-    Создает Markdown-файл, заменяя переносы строк на пробелы
-    и экранируя спецсимволы.
+    Создает Markdown-файл, добавляя:
+    - № (порядковый номер)
+    - Заголовок (summary) сразу после столбца с ключом задачи
+    и экранируя спецсимволы для таблицы.
     """
     try:
         options = {'server': url_jira_server, 'verify': path_to_cert}
         jira = JIRA(options=options, basic_auth=log_passw)
 
-        table_header = "| Задача | Что изменено | Как изменено |\n"
-        table_divider = "|:---|:---|:---|\n"
+        # шапка таблицы
+        table_header = "| № | Задача | Заголовок | Что изменено | Как изменено |\n"
+        table_divider = "|:--:|:---|:---|:---|:---|\n"
         markdown_content = table_header + table_divider
 
-        for issue_key in issues_list:
-            issue = jira.issue(issue_key, fields=f"{field_what},{field_how}")
-            
+        # для нормализации текста ячеек
+        def norm(value):
+            if not value:
+                return "-"
+            return str(value).replace('\r\n', ' ').replace('\n', ' ').replace('|', '\\|')
+
+        # Индексация задач и загрузка summary + нужных кастом-полей (что измено, как изменено)
+        for idx, issue_key in enumerate(issues_list, start=1):
+            issue = jira.issue(issue_key, fields=f"summary,{field_what},{field_how}")
+
+            title_value = getattr(issue.fields, "summary", None)
             what_value = getattr(issue.fields, field_what, None)
             how_value = getattr(issue.fields, field_how, None)
 
-            if what_value:
-                # 1. Заменяем оба вида переносов на пробел
-                # 2. Экранируем '|' для избежания конфликтов с компилятором markdown
-                what_str = str(what_value).replace('\r\n', ' ').replace('\n', ' ').replace('|', '\\|')
-            else:
-                what_str = "-"
+            title_str = norm(title_value)
+            what_str = norm(what_value)
+            how_str = norm(how_value)
 
-            if how_value:
-                how_str = str(how_value).replace('\r\n', ' ').replace('\n', ' ').replace('|', '\\|')
-            else:
-                how_str = "-"
-            
             issue_link = f"[{issue_key}]({url_jira_server}/browse/{issue_key})"
-                
-            markdown_content += f"| {issue_link} | {what_str} | {how_str} |\n"
+            markdown_content += f"| {idx} | {issue_link} | {title_str} | {what_str} | {how_str} |\n"
 
         with open(filename, 'w', encoding='utf-8') as f:
             f.write(markdown_content)
@@ -158,7 +160,7 @@ def create_confluence_space_and_page(confluence_url,
 
 # Данные для подключения
 # Путь к файлу сертификата if use virtual envirament
-path_to_cert = './venv/cert/jira-gal-lan-chain.pem'
+path_to_cert = './cert/jira-gal-lan-chain.pem'
 # Jira server
 url = 'https://jira.galaktika.local'
 log = 'dementev@gal.lan'
@@ -171,7 +173,7 @@ table_md_path = './tmp/table.md'
 url_confluence = "https://jira.galaktika.local/wiki"
 space_key = "test" # ключ пространства
 space_name = "test"
-page_title = "Заголовок"
+page_title = "Задача на выпуск обновлений"
 
 
 linked_issues = linked_issues_func(url, (log, passw), task_num, path_to_cert)
